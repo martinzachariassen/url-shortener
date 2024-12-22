@@ -12,4 +12,8 @@ class GlobalExceptionHandler {
         val errors = ex.bindingResult.fieldErrors.associate { it.field to (it.defaultMessage ?: "Invalid value") }
         return ResponseEntity.badRequest().body(errors)
     }
+
+    @ExceptionHandler(IllegalStateException::class)
+    fun handleIllegalStateException(ex: IllegalStateException): ResponseEntity<String> =
+        ResponseEntity.badRequest().body("An unexpected error occurred: ${ex.message}")
 }

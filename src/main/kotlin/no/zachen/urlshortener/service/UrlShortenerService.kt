@@ -6,6 +6,7 @@ import no.zachen.urlshortener.model.UrlMapping
 import no.zachen.urlshortener.repository.UrlMappingRepository
 import no.zachen.urlshortener.utils.logger
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.cache.annotation.Cacheable
 import org.springframework.stereotype.Service
 
 interface IUrlShortenerService {
@@ -32,27 +33,35 @@ class UrlShortenerService(
             )
 
         return withContext(Dispatchers.IO) {
-            repository.save(urlMapping) // Save to the database asynchronously
+            repository.save(urlMapping)
         }
     }
 
-    override fun getOriginalUrl(shortUrl: String): String = repository.findByShortUrl(shortUrl).originalUrl
+    @Cacheable("shortUrls")
+    override fun getOriginalUrl(shortUrl: String): String {
+        val urlMapping =
+            repository.findByShortUrl(shortUrl)
+                ?: throw NoSuchElementException("No mapping found for shortUrl: $shortUrl")
+        return urlMapping.originalUrl
+    }
 
-    fun generateShortUrl(shortUrlLength: Int = 6): String =
-        (1..shortUrlLength)
+    fun generateShortUrl(shortUrlLength: Int = 6): String {
+        val characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+        return (1..shortUrlLength)
             .map { characters.random() }
             .joinToString("")
-
-    private val characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    }
 
     private suspend fun generateUniqueShortUrl(): String {
         while (true) {
             val shortUrl = generateShortUrl()
-            if (!withContext(Dispatchers.IO) { repository.existsByShortUrl(shortUrl) }) {
+            val exists = withContext(Dispatchers.IO) { repository.existsByShortUrl(shortUrl) }
+            if (!exists) {
                 logger.info("Generated unique shortUrl: $shortUrl")
                 return shortUrl
             }
-            logger.info("ShortUrl $shortUrl already exists. Generating a new one...")
+            logger.info("ShortUrl $shortUrl already exists. Retrying...")
         }
     }
 }

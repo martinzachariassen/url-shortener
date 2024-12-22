@@ -7,7 +7,7 @@ import java.util.*
 
 @Repository
 interface UrlMappingRepository : JpaRepository<UrlMapping, UUID> {
-    fun findByShortUrl(shortUrl: String): UrlMapping
+    fun findByShortUrl(shortUrl: String): UrlMapping?
 
     fun existsByShortUrl(shortUrl: String): Boolean
 }

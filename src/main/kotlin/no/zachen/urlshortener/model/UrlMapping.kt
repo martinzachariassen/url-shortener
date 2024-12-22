@@ -5,7 +5,10 @@ import java.time.LocalDateTime
 import java.util.UUID
 
 @Entity
-@Table(name = "url_mappings")
+@Table(
+    name = "url_mappings",
+    uniqueConstraints = [UniqueConstraint(columnNames = ["shortUrl"])],
+)
 data class UrlMapping(
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
