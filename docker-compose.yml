@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres
+    container_name: testdb
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: testdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

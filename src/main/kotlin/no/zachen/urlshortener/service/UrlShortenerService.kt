@@ -6,13 +6,12 @@ import no.zachen.urlshortener.model.UrlMapping
 import no.zachen.urlshortener.repository.UrlMappingRepository
 import no.zachen.urlshortener.utils.logger
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.cache.annotation.Cacheable
 import org.springframework.stereotype.Service
 
 interface IUrlShortenerService {
     suspend fun shortenUrl(originalUrl: String): UrlMapping
 
-    fun getOriginalUrl(shortUrl: String): String
+    suspend fun getOriginalUrl(shortUrl: String): String
 }
 
 @Service
@@ -37,8 +36,7 @@ class UrlShortenerService(
         }
     }
 
-    @Cacheable("shortUrls")
-    override fun getOriginalUrl(shortUrl: String): String {
+    override suspend fun getOriginalUrl(shortUrl: String): String {
         val urlMapping =
             repository.findByShortUrl(shortUrl)
                 ?: throw NoSuchElementException("No mapping found for shortUrl: $shortUrl")

@@ -1,23 +1,19 @@
 package no.zachen.urlshortener.model
 
-import jakarta.persistence.*
+import org.springframework.data.annotation.Id
+import org.springframework.data.relational.core.mapping.Column
+import org.springframework.data.relational.core.mapping.Table
 import java.time.LocalDateTime
-import java.util.UUID
 
-@Entity
-@Table(
-    name = "url_mappings",
-    uniqueConstraints = [UniqueConstraint(columnNames = ["shortUrl"])],
-)
+@Table(name = "url_mapping")
 data class UrlMapping(
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
-    val id: UUID? = null,
-    // Note: this is only the random part of the created url (not the whole thing, with https://..)
-    @Column(name = "short_url", unique = true, nullable = false)
+    @Column("id")
+    val id: Int? = null,
+    @Column("short_url")
     val shortUrl: String,
-    @Column(name = "original_url", nullable = false)
+    @Column("original_url")
     val originalUrl: String,
-    @Column(name = "created_at", nullable = false)
+    @Column("created_at")
     val createdAt: LocalDateTime = LocalDateTime.now(),
 )

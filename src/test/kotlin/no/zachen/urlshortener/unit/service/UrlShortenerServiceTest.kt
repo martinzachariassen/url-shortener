@@ -9,9 +9,7 @@ import no.zachen.urlshortener.repository.UrlMappingRepository
 import no.zachen.urlshortener.service.UrlShortenerService
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import org.springframework.boot.test.context.SpringBootTest
 
-@SpringBootTest
 class UrlShortenerServiceTest {
     private val repository: UrlMappingRepository = mockk()
     private val service = UrlShortenerService(repository)
