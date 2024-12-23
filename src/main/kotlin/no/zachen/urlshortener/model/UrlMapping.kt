@@ -12,7 +12,7 @@ import java.util.UUID
 data class UrlMapping(
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
-    val id: UUID = UUID.randomUUID(),
+    val id: UUID? = null,
     // Note: this is only the random part of the created url (not the whole thing, with https://..)
     @Column(name = "short_url", unique = true, nullable = false)
     val shortUrl: String,
