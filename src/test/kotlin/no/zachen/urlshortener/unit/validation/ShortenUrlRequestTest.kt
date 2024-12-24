@@ -1,4 +1,4 @@
-package no.zachen.urlshortener.validation
+package no.zachen.urlshortener.unit.validation
 
 import jakarta.validation.Validation
 import jakarta.validation.Validator
