@@ -1,16 +1,21 @@
 package no.zachen.urlshortener.integration.repository
 
 import kotlinx.coroutines.test.runTest
+import no.zachen.urlshortener.integration.setup.PostgresTestSetup
 import no.zachen.urlshortener.model.UrlMapping
 import no.zachen.urlshortener.repository.UrlMappingRepository
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.testcontainers.junit.jupiter.Testcontainers
 
 @SpringBootTest
+@Testcontainers
 class UrlMappingRepositoryIntegrationTest {
     @Autowired
     private lateinit var urlMappingRepository: UrlMappingRepository
@@ -97,4 +102,22 @@ class UrlMappingRepositoryIntegrationTest {
             Assertions.assertNotNull(second)
             Assertions.assertEquals("https://multi2.com", second?.originalUrl)
         }
+
+    companion object {
+        @JvmStatic
+        @AfterAll
+        fun stopContainer(): Unit =
+            runTest {
+                PostgresTestSetup.stopContainer()
+            }
+
+        @JvmStatic
+        @BeforeAll
+        fun initializeContainer(): Unit =
+            runTest {
+                PostgresTestSetup.startContainer() // Await container startup
+                println("PostgreSQL Testcontainer initialized:")
+                println("R2DBC URL: ${PostgresTestSetup.getR2dbcUrl()}")
+            }
+    }
 }
