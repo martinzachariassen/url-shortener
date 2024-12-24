@@ -35,6 +35,13 @@ dependencies {
     testImplementation("org.testcontainers:testcontainers:1.20.4")
     testImplementation("org.testcontainers:junit-jupiter:1.20.4")
     testImplementation("org.testcontainers:postgresql:1.20.4")
+
+    // Explicitly adding the patched version of commons-compress (1.27.1) to override a vulnerable transitive dependency.
+    // Testcontainers transitively brings in commons-compress:1.24.0, which has known vulnerabilities:
+    // - GHSA-4g9r-vxhx-9pgx (Denial of Service via infinite loop with corrupted DUMP files)
+    // - GHSA-4265-ccf5-phj5 (OutOfMemoryError with broken Pack200 files)
+    // Adding this dependency ensures the application uses a safe version of commons-compress during testing.
+    testImplementation("org.apache.commons:commons-compress:1.27.1")
 }
 
 kotlin {
