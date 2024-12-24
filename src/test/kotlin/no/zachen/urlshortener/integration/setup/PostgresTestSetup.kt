@@ -5,46 +5,97 @@ import com.github.dockerjava.api.model.HostConfig
 import com.github.dockerjava.api.model.PortBinding
 import com.github.dockerjava.api.model.Ports
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.reactive.awaitSingle
+import kotlinx.coroutines.reactor.awaitSingleOrNull
 import kotlinx.coroutines.withContext
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import org.springframework.r2dbc.core.DatabaseClient
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
+import java.io.File
+import java.io.IOException
 
+/**
+ * Provides a utility for setting up and managing a PostgreSQL database for integration testing.
+ * This setup uses Testcontainers to start and manage a PostgreSQL container, performs schema
+ * initialization with a specified SQL script, and exposes methods to start and stop the container.
+ */
 object PostgresTestSetup {
+    private val logger: Logger = LoggerFactory.getLogger(PostgresTestSetup::class.java)
+
+    private const val POSTGRES_IMAGE = "postgres:latest"
+    private const val DATABASE_NAME = "testdb"
+    private const val USERNAME = "test"
+    private const val PASSWORD = "test"
+    private const val PORT = 5432
+    private const val SQL_SCRIPT_PATH = "src/test/resources/db/migration/V1__initial_schema.sql"
+
+    /**
+     * A PostgreSQL container instance used for running and testing database operations in an isolated environment.
+     *
+     * This container is configured with the specified database name, username, and password. The PostgreSQL port
+     * is dynamically mapped from the container's internal port to a host port that is automatically allocated.
+     *
+     * The container provides a reusable, controlled PostgreSQL environment for integration tests or other scenarios that
+     * require a temporary database instance. It is initialized with custom port bindings by modifying the underlying
+     * container configuration during creation.
+     */
     private val postgresContainer =
-        PostgreSQLContainer<Nothing>(DockerImageName.parse("postgres:latest")).apply {
-            withDatabaseName("testdb")
-            withUsername("test")
-            withPassword("test")
-            // Forces the container’s internal port 5432 to bind to the host’s port 5432.
-            // Overrides the default behavior of dynamically assigning a random host port.
+        PostgreSQLContainer<Nothing>(DockerImageName.parse(POSTGRES_IMAGE)).apply {
+            withDatabaseName(DATABASE_NAME)
+            withUsername(USERNAME)
+            withPassword(PASSWORD)
+
+            // Bind internal PostgreSQL port to a dynamically allocated host port
             withCreateContainerCmdModifier { cmd ->
-                // Replaces the default HostConfig of the container with a custom HostConfig that
-                // includes your specific configuration (in this case, port bindings).
                 cmd.withHostConfig(
-                    // Creates a new HostConfig object and applies port bindings to it.
-                    HostConfig().withPortBindings(PortBinding(Ports.Binding.bindPort(5432), ExposedPort(5432))),
+                    HostConfig().withPortBindings(
+                        PortBinding(Ports.Binding.bindPort(PORT), ExposedPort(PORT)),
+                    ),
                 )
             }
         }
 
+    /**
+     * Starts a PostgreSQL container in a background thread and initializes the database schema.
+     *
+     * This method ensures the PostgreSQL container is running before performing any database operations. If the container
+     * is already running, it skips the startup process. In the case of a successful start, it logs the mapped external
+     * port of the container. It also initializes the database schema after starting the container by invoking the
+     * `initializeDatabaseSchema` function.
+     *
+     * The container startup process and subsequent operations are executed within the `Dispatchers.IO` context.
+     *
+     * @throws Exception If the PostgreSQL container fails to start or the database schema initialization encounters an error.
+     */
     suspend fun startContainer() {
         withContext(Dispatchers.IO) {
             if (!postgresContainer.isRunning) {
-                postgresContainer.start()
+                try {
+                    postgresContainer.start()
+                    logger.info("PostgreSQL container started on port: ${postgresContainer.getMappedPort(PORT)}")
+                } catch (ex: Exception) {
+                    logger.error("Failed to start PostgreSQL container", ex)
+                    throw ex
+                }
             }
 
-            println("PostgreSQL container started:")
-            println("R2DBC URL: ${getR2dbcUrl()}")
-
-            // Initialize the database schema
-            initializeDatabase()
+            initializeDatabaseSchema()
         }
     }
 
-    private suspend fun initializeDatabase() {
-        // Create a DatabaseClient using R2DBC
+    /**
+     * Initializes the database schema by executing an SQL script.
+     *
+     * This method connects to a PostgreSQL database using a dynamically mapped port from a running container.
+     * It reads an SQL script from the specified path and executes the script to set up or update the database schema.
+     * Logs informational messages for successful operations and errors when exceptions occur.
+     *
+     * @throws IOException If there is an error reading the SQL script.
+     * @throws Exception If there is an error during SQL execution or database connection.
+     */
+    private suspend fun initializeDatabaseSchema() {
+        // Build a DatabaseClient to interact with the PostgreSQL database
         val databaseClient =
             DatabaseClient
                 .builder()
@@ -52,46 +103,73 @@ object PostgresTestSetup {
                     io.r2dbc.postgresql.PostgresqlConnectionFactory(
                         io.r2dbc.postgresql.PostgresqlConnectionConfiguration
                             .builder()
-                            .host("localhost") // Host of your PostgreSQL container
-                            .port(5432) // Port to which your container is mapped
-                            .database("testdb")
-                            .username("test")
-                            .password("test")
+                            .host("localhost")
+                            .port(postgresContainer.getMappedPort(5432)) // Use dynamically mapped port
+                            .database(DATABASE_NAME)
+                            .username(USERNAME)
+                            .password(PASSWORD)
                             .build(),
                     ),
                 ).build()
 
-        // Execute the SQL migration to set up the `url_mapping` table
-        databaseClient
-            .sql(
-                """
-        CREATE TABLE IF NOT EXISTS url_mapping (
-            id SERIAL PRIMARY KEY,
-            short_url VARCHAR(255) NOT NULL UNIQUE,
-            original_url TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        
-        CREATE UNIQUE INDEX idx_short_url_unique ON url_mapping(short_url);
-        """,
-            ).fetch()
-            .rowsUpdated()
-            .awaitSingle()
+        val sql =
+            try {
+                readSqlScript(SQL_SCRIPT_PATH)
+            } catch (ex: IOException) {
+                logger.error("Failed to read SQL script from file: $SQL_SCRIPT_PATH", ex)
+                throw ex
+            }
 
-        println("Database schema initialized!")
+        try {
+            databaseClient
+                .sql(sql)
+                .fetch()
+                .rowsUpdated()
+                .awaitSingleOrNull()
+            logger.info("Database schema initialized successfully!")
+        } catch (ex: Exception) {
+            logger.error("Failed to initialize database schema", ex)
+            throw ex
+        }
     }
 
-//    fun getJdbcUrl(): String = postgresContainer.jdbcUrl
+    /**
+     * Reads the content of an SQL script file from the provided path.
+     *
+     * This method reads the entire content of the file located at the given path
+     * and returns it as a string. Logs an informational message upon successfully
+     * reading the file.
+     *
+     * @param path The file path of the SQL script to be read.
+     * @return The content of the SQL script as a string.
+     * @throws IOException If an error occurs while reading the file.
+     */
+    private fun readSqlScript(path: String): String =
+        File(path).readText().also {
+            logger.info("Successfully read SQL script from file: $path")
+        }
 
-    fun getR2dbcUrl(): String = "r2dbc:postgresql://${postgresContainer.host}:${postgresContainer.getMappedPort(5432)}/testdb"
-
-//    fun getUsername(): String = postgresContainer.username
-
-//    fun getPassword(): String = postgresContainer.password
-
-    fun stopContainer() {
-        if (postgresContainer.isRunning) {
-            postgresContainer.stop()
+    /**
+     * Stops a running PostgreSQL container in a background thread.
+     *
+     * This method checks if the PostgreSQL container is currently running. If it is,
+     * it attempts to stop the container while logging success or failure messages.
+     * The operation is executed within the `Dispatchers.IO` context to ensure non-blocking
+     * behavior for IO-intensive tasks.
+     *
+     * Any exceptions during the stopping process are caught, logged as errors, and handled
+     * gracefully to avoid abrupt failures in the application.
+     */
+    suspend fun stopContainer() {
+        withContext(Dispatchers.IO) {
+            if (postgresContainer.isRunning) {
+                try {
+                    postgresContainer.stop()
+                    logger.info("PostgreSQL container stopped successfully.")
+                } catch (ex: Exception) {
+                    logger.error("Failed to stop PostgreSQL container", ex)
+                }
+            }
         }
     }
 }

@@ -1,0 +1,7 @@
+postgres:
+  image: postgres:latest
+  database: testdb
+  username: test
+  password: test
+  port: 5432
+  sqlScriptPath: src/test/resources/db/migration/V1__initial_schema.sql

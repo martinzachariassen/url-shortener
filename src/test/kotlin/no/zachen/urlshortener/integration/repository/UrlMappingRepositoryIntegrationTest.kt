@@ -115,9 +115,7 @@ class UrlMappingRepositoryIntegrationTest {
         @BeforeAll
         fun initializeContainer(): Unit =
             runTest {
-                PostgresTestSetup.startContainer() // Await container startup
-                println("PostgreSQL Testcontainer initialized:")
-                println("R2DBC URL: ${PostgresTestSetup.getR2dbcUrl()}")
+                PostgresTestSetup.startContainer()
             }
     }
 }
