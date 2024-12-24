@@ -7,9 +7,13 @@ import com.github.dockerjava.api.model.Ports
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.reactor.awaitSingleOrNull
 import kotlinx.coroutines.withContext
+import no.zachen.urlshortener.config.TestConfig
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.r2dbc.core.DatabaseClient
+import org.springframework.stereotype.Component
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
 import java.io.File
@@ -20,15 +24,13 @@ import java.io.IOException
  * This setup uses Testcontainers to start and manage a PostgreSQL container, performs schema
  * initialization with a specified SQL script, and exposes methods to start and stop the container.
  */
-object PostgresTestSetup {
+@SpringBootTest
+@Component
+class PostgresTestSetup(
+    @Autowired private val testConfig: TestConfig,
+) {
     private val logger: Logger = LoggerFactory.getLogger(PostgresTestSetup::class.java)
-
-    private const val POSTGRES_IMAGE = "postgres:latest"
-    private const val DATABASE_NAME = "testdb"
-    private const val USERNAME = "test"
-    private const val PASSWORD = "test"
-    private const val PORT = 5432
-    private const val SQL_SCRIPT_PATH = "src/test/resources/db/migration/V1__initial_schema.sql"
+    private val postgresConfig = testConfig.postgres
 
     /**
      * A PostgreSQL container instance used for running and testing database operations in an isolated environment.
@@ -41,16 +43,16 @@ object PostgresTestSetup {
      * container configuration during creation.
      */
     private val postgresContainer =
-        PostgreSQLContainer<Nothing>(DockerImageName.parse(POSTGRES_IMAGE)).apply {
-            withDatabaseName(DATABASE_NAME)
-            withUsername(USERNAME)
-            withPassword(PASSWORD)
+        PostgreSQLContainer<Nothing>(DockerImageName.parse(postgresConfig.image)).apply {
+            withDatabaseName(postgresConfig.database)
+            withUsername(postgresConfig.username)
+            withPassword(postgresConfig.password)
 
             // Bind internal PostgreSQL port to a dynamically allocated host port
             withCreateContainerCmdModifier { cmd ->
                 cmd.withHostConfig(
                     HostConfig().withPortBindings(
-                        PortBinding(Ports.Binding.bindPort(PORT), ExposedPort(PORT)),
+                        PortBinding(Ports.Binding.bindPort(postgresConfig.port), ExposedPort(postgresConfig.port)),
                     ),
                 )
             }
@@ -73,7 +75,7 @@ object PostgresTestSetup {
             if (!postgresContainer.isRunning) {
                 try {
                     postgresContainer.start()
-                    logger.info("PostgreSQL container started on port: ${postgresContainer.getMappedPort(PORT)}")
+                    logger.info("PostgreSQL container started on port: ${postgresContainer.getMappedPort(postgresConfig.port)}")
                 } catch (ex: Exception) {
                     logger.error("Failed to start PostgreSQL container", ex)
                     throw ex
@@ -105,18 +107,18 @@ object PostgresTestSetup {
                             .builder()
                             .host("localhost")
                             .port(postgresContainer.getMappedPort(5432)) // Use dynamically mapped port
-                            .database(DATABASE_NAME)
-                            .username(USERNAME)
-                            .password(PASSWORD)
+                            .database(postgresConfig.database)
+                            .username(postgresConfig.username)
+                            .password(postgresConfig.password)
                             .build(),
                     ),
                 ).build()
 
         val sql =
             try {
-                readSqlScript(SQL_SCRIPT_PATH)
+                readSqlScript(postgresConfig.sqlScriptPath)
             } catch (ex: IOException) {
-                logger.error("Failed to read SQL script from file: $SQL_SCRIPT_PATH", ex)
+                logger.error("Failed to read SQL script from file: ${postgresConfig.sqlScriptPath}", ex)
                 throw ex
             }
 

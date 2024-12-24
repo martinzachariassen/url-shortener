@@ -10,15 +10,32 @@ import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.TestInstance
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.testcontainers.junit.jupiter.Testcontainers
 
 @SpringBootTest
 @Testcontainers
+@TestInstance(TestInstance.Lifecycle.PER_CLASS) // Use per-class lifecycle to allow non-static @BeforeAll/@AfterAll
 class UrlMappingRepositoryIntegrationTest {
     @Autowired
     private lateinit var urlMappingRepository: UrlMappingRepository
+
+    @Autowired
+    lateinit var postgresTestSetup: PostgresTestSetup
+
+    @BeforeAll
+    fun initializeContainer() =
+        runTest {
+            postgresTestSetup.startContainer()
+        }
+
+    @AfterAll
+    fun stopContainer() =
+        runTest {
+            postgresTestSetup.stopContainer()
+        }
 
     @BeforeEach
     fun setup() =
@@ -102,20 +119,4 @@ class UrlMappingRepositoryIntegrationTest {
             Assertions.assertNotNull(second)
             Assertions.assertEquals("https://multi2.com", second?.originalUrl)
         }
-
-    companion object {
-        @JvmStatic
-        @AfterAll
-        fun stopContainer(): Unit =
-            runTest {
-                PostgresTestSetup.stopContainer()
-            }
-
-        @JvmStatic
-        @BeforeAll
-        fun initializeContainer(): Unit =
-            runTest {
-                PostgresTestSetup.startContainer()
-            }
-    }
 }

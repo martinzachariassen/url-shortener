@@ -3,6 +3,16 @@ spring:
     url: r2dbc:postgresql://localhost:5432/testdb
     username: test
     password: test
+
+test:
+  postgres:
+    image: postgres:latest
+    database: testdb
+    username: test
+    password: test
+    port: 5432
+    sqlScriptPath: src/test/resources/db/migration/V1__initial_schema.sql
+
 logging:
   level:
     org.springframework.r2dbc: DEBUG
